@@ -1,6 +1,6 @@
-# 📚 Hệ Thống Giám Sát Tài Xế (DMS) - Documentation
+#  Hệ Thống Giám Sát Tài Xế (DMS) - Documentation
 
-## 📖 Mục Lục
+##  Mục Lục
 
 1. [Tổng Quan](#tổng-quan)
 2. [Yêu Cầu Hệ Thống](#yêu-cầu-hệ-thống)
@@ -14,13 +14,13 @@
 
 ---
 
-## 🎯 Tổng Quan
+##  Tổng Quan
 
 **DMS (Driver Monitoring System)** là hệ thống thời gian thực phát hiện:
-- 😴 **Buồn ngủ** - Theo dõi nhắm mắt liên tục
-- 😑 **Ngáp** - Phát hiện miệng mở lớn
-- 🔄 **Tư thế đầu** - Hướng nhìn không đúng
-- 📱 **Mất tập trung** - Tay gần mặt (dùng điện thoại)
+-  **Buồn ngủ** - Theo dõi nhắm mắt liên tục
+-  **Ngáp** - Phát hiện miệng mở lớn
+-  **Tư thế đầu** - Hướng nhìn không đúng
+-  **Mất tập trung** - Tay gần mặt (dùng điện thoại)
 
 **Công nghệ:**
 - OpenCV: Xử lý hình ảnh
@@ -30,7 +30,7 @@
 
 ---
 
-## 💻 Yêu Cầu Hệ Thống
+##  Yêu Cầu Hệ Thống
 
 ### Phần Cứng
 ```
@@ -56,7 +56,7 @@ playsound>=1.2.2 (tùy chọn, cho cảnh báo âm thanh)
 
 ---
 
-## 🚀 Cài Đặt & Chạy
+##  Cài Đặt & Chạy
 
 ### 1. Clone/Download Dự Án
 ```bash
@@ -88,7 +88,7 @@ Nhấn phím `q` trên cửa sổ video
 
 ---
 
-## 🏗️ Kiến Trúc Hệ Thống
+##  Kiến Trúc Hệ Thống
 
 ### Sơ Đồ Flow
 
@@ -370,11 +370,11 @@ while True:
     
     # Kiểm tra kết quả
     if result['canh_bao_buon_ngu']:
-        print("⚠️ Phát hiện buồn ngủ!")
+        print(" Phát hiện buồn ngủ!")
         print(f"EAR: {result['ear']:.2f}")
     
     if result['canh_bao_ngap']:
-        print("🥱 Phát hiện ngáp!")
+        print(" Phát hiện ngáp!")
     
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
@@ -442,7 +442,7 @@ enhanced = preprocessor.tang_cuong(frame)
 
 ## 🔧 Troubleshooting
 
-### ❌ Lỗi: "Không thể mở camera"
+### Lỗi: "Không thể mở camera"
 
 **Nguyên nhân:**
 - Camera bị chiếm dụng bởi ứng dụng khác
@@ -461,14 +461,14 @@ ffmpeg -list_devices true -f dshow -i dummy
 ls /dev/video*
 ```
 
-### ❌ Lỗi: "playsound not installed"
+### Lỗi: "playsound not installed"
 
 **Giải pháp:**
 ```bash
 pip install playsound
 ```
 
-### ❌ Performance chậm
+### Performance chậm
 
 **Nguyên nhân:**
 - CPU yếu
@@ -485,7 +485,7 @@ python main.py --width 320 --height 240
 # kich_thuoc_o: Tuple[int, int] = (16, 16)  # Tăng từ 8, 8
 ```
 
-### ❌ Phát hiện không chính xác
+### Phát hiện không chính xác
 
 **Nguyên nhân:**
 - Ánh sáng yếu
@@ -500,7 +500,7 @@ python main.py --width 320 --height 240
 4. Điều chỉnh ngưỡng trong constants.py
 ```
 
-### ❌ Cảnh báo âm thanh không phát
+### Cảnh báo âm thanh không phát
 
 **Kiểm tra:**
 ```python
@@ -515,7 +515,7 @@ playsound.playsound('chicken-on-tree.mp3')
 
 ---
 
-## 📊 Performance Metrics
+## Performance Metrics
 
 ### Yêu cầu
 
@@ -544,7 +544,7 @@ thread.start()
 
 ---
 
-## 📚 Tham Khảo Khoa Học
+## Tham Khảo Khoa Học
 
 1. **EAR/MAR:**
    - Tereza et al., "Real Time Eye Gaze Tracking with 3D Deformable Eye-Face Model", ICCV 2015
@@ -560,14 +560,14 @@ thread.start()
 
 ---
 
-## 📞 Hỗ Trợ
+## Hỗ Trợ
 
 Gặp vấn đề?
 
 1. Kiểm tra **Troubleshooting** section
 2. Xem **log messages** (terminal)
 3. Thử giảm resolution hoặc điều chỉnh thresholds
-4. Liên hệ: MinhVM
+4. Liên hệ: minhdev@duck.com
 
 ---
 
