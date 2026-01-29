@@ -1,4 +1,4 @@
-# 🔌 API Reference - DMS
+#  API Reference - DMS
 
 ## Mục Lục
 
@@ -15,7 +15,7 @@
 
 ### Module: `dms/constants.py`
 
-#### 🎛️ DrowsinessConfig (Cấu Hình Buồn Ngủ)
+####  DrowsinessConfig (Cấu Hình Buồn Ngủ)
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -38,7 +38,7 @@ class DrowsinessConfig:
     """Cooldown tối thiểu giữa 2 lần phát âm thanh"""
 ```
 
-#### 🎛️ HeadPoseConfig
+####  HeadPoseConfig
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -55,7 +55,7 @@ class HeadPoseConfig:
     """Roll > 25° = nghiêng đầu"""
 ```
 
-#### 🎛️ DistractionConfig
+####  DistractionConfig
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -69,7 +69,7 @@ class DistractionConfig:
     """Mở rộng bbox mặt 20% khi kiểm tra tay gần mặt"""
 ```
 
-#### 🎨 Mau (Màu BGR)
+####  Mau (Màu BGR)
 
 ```python
 class Mau:
@@ -89,7 +89,7 @@ class Mau:
 
 ### Module: `dms/preprocessing.py`
 
-#### 📸 TienXuLyCLAHE
+####  TienXuLyCLAHE
 
 **Mục đích:** Cải thiện ảnh trong điều kiện ánh sáng yếu
 
@@ -144,7 +144,7 @@ def tang_cuong(self, khung_hinh: np.ndarray) -> np.ndarray:
 
 ### Module: `dms/face_analysis.py`
 
-#### 🎯 PhanTichMat
+####  PhanTichMat
 
 **Mục đích:** Phân tích khuôn mặt (EAR, MAR, Head Pose)
 
@@ -267,7 +267,7 @@ class HeadPose(NamedTuple):
 
 ### Module: `dms/hand_tracking.py`
 
-#### ✋ TheoDoiTay
+####  TheoDoiTay
 
 **Mục đích:** Phát hiện & theo dõi tay, phát hiện mất tập trung
 
@@ -343,7 +343,7 @@ Reset
 
 ### Module: `dms/filters.py`
 
-#### 📊 BoLocThapThong (Low Pass Filter)
+####  BoLocThapThong (Low Pass Filter)
 
 ```python
 @dataclass
@@ -359,7 +359,7 @@ class BoLocThapThong:
 y(t) = α * x(t) + (1 - α) * y(t-1)
 ```
 
-#### 🎯 BoLocOneEuro
+#### BoLocOneEuro
 
 ```python
 @dataclass
@@ -396,7 +396,7 @@ def loc(self, x: float, timestamp: Optional[float] = None) -> float:
     """
 ```
 
-#### 📊 BoLocOneEuroNhieuKenh
+####  BoLocOneEuroNhieuKenh
 
 ```python
 @dataclass
@@ -433,7 +433,7 @@ def loc(self, gia_tri: List[float], timestamp: Optional[float] = None) -> List[f
 
 ### Module: `dms/visualization.py`
 
-#### 🎨 TraoDuaTinhNang
+####  TraoDuaTinhNang
 
 ```python
 @dataclass
@@ -492,7 +492,7 @@ def ve_diem_moc_tay(self, khung_hinh: np.ndarray, danh_sach_tay: List) -> np.nda
     """
 ```
 
-#### 🎛️ CauHinhBangTin
+####  CauHinhBangTin
 
 ```python
 @dataclass(frozen=True)
@@ -507,7 +507,7 @@ class CauHinhBangTin:
 
 ---
 
-## 🔗 Integrations
+##  Integrations
 
 ### Lớp Chính: HeThongGiamSatTaiXe (main.py)
 
@@ -544,7 +544,7 @@ def _dung(self) -> None:
 
 ---
 
-## 📝 Ghi Chú
+##  Ghi Chú
 
 - Tất cả hàm **không** raise exceptions, trả về default nếu lỗi
 - Sử dụng **logging** cho debug info
