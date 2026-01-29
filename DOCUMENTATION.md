@@ -243,7 +243,7 @@ smoothed = filter.loc(raw_value, timestamp)
 
 ---
 
-## ⚙️ Configuration
+##  Configuration
 
 ### Sửa Đổi Ngưỡng
 
