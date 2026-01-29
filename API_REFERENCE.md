@@ -250,7 +250,7 @@ def release(self) -> None:
     """Giải phóng MediaPipe resources"""
 ```
 
-#### 📐 HeadPose (NamedTuple)
+####  HeadPose (NamedTuple)
 
 ```python
 class HeadPose(NamedTuple):
