@@ -6,7 +6,7 @@ Hệ thống giám sát tài xế thời gian thực sử dụng OpenCV và Medi
 
 - **Cải Thiện Ánh Sáng Yếu**: Tiền xử lý CLAHE để tăng khả năng hiển thị
 - **Phát Hiện Buồn Ngủ**: Theo dõi Tỷ lệ Khung Mắt (EAR)
-  - 🔔 **Cảnh báo âm thanh**: Phát âm thanh "chicken-on-tree.mp3" khi buồn ngủ liên tục >5 giây
+  -  **Cảnh báo âm thanh**: Phát âm thanh "chicken-on-tree.mp3" khi buồn ngủ liên tục >5 giây
 - **Phát Hiện Ngáp**: Phân tích Tỷ lệ Khung Miệng (MAR)
 - **Ước Lượng Tư Thế Đầu**: Phát hiện pitch/yaw/roll dựa trên PnP
 - **Phát Hiện Mất Tập Trung**: Theo dõi tay đưa lên mặt
