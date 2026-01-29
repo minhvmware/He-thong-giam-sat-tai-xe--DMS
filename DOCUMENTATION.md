@@ -140,7 +140,7 @@ main.py                   # Điểm chính
 
 ---
 
-## 🔌 API Reference
+##  API Reference
 
 ### PhanTichMat (Face Analysis)
 
@@ -271,7 +271,7 @@ class HeThongGiamSatTaiXe:
 
 ---
 
-## 🧠 Thuật Toán
+## Thuật Toán
 
 ### 1. Eye Aspect Ratio (EAR)
 
@@ -343,7 +343,7 @@ fc(t) = f_min + β * |dx(t)|
 
 ---
 
-## 💡 Ví Dụ Sử Dụng
+##  Ví Dụ Sử Dụng
 
 ### Ví Dụ 1: Sử Dụng Trực Tiếp
 
@@ -440,7 +440,7 @@ enhanced = preprocessor.tang_cuong(frame)
 
 ---
 
-## 🔧 Troubleshooting
+##  Troubleshooting
 
 ### Lỗi: "Không thể mở camera"
 
