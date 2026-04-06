@@ -61,15 +61,67 @@ class CauHinhCamera:
     fps: int = 30
 
 
+class CameraCapture:
+    """Wrapper hỗ trợ cả picamera2 (CSI trên Pi) và OpenCV (USB webcam)."""
+
+    def __init__(self, cau_hinh: CauHinhCamera):
+        self._picam2 = None
+        self._cv2_cap = None
+
+        # Thử picamera2 trước (CSI camera trên Raspberry Pi)
+        try:
+            from picamera2 import Picamera2
+            self._picam2 = Picamera2()
+            config = self._picam2.create_preview_configuration(
+                main={"size": (cau_hinh.chieu_rong, cau_hinh.chieu_cao), "format": "RGB888"}
+            )
+            self._picam2.configure(config)
+            self._picam2.start()
+            logger.info(f"Camera CSI sẵn sàng (picamera2) "
+                        f"({cau_hinh.chieu_rong}x{cau_hinh.chieu_cao})")
+            return
+        except ImportError:
+            logger.info("picamera2 không có, thử OpenCV...")
+        except Exception as e:
+            logger.warning(f"picamera2 lỗi: {e}, thử OpenCV...")
+            self._picam2 = None
+
+        # Fallback: OpenCV VideoCapture (USB webcam / desktop)
+        self._cv2_cap = cv2.VideoCapture(cau_hinh.id_camera)
+        self._cv2_cap.set(cv2.CAP_PROP_FRAME_WIDTH, cau_hinh.chieu_rong)
+        self._cv2_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, cau_hinh.chieu_cao)
+        self._cv2_cap.set(cv2.CAP_PROP_FPS, cau_hinh.fps)
+        if not self._cv2_cap.isOpened():
+            raise RuntimeError(f"Không thể mở camera {cau_hinh.id_camera}")
+        logger.info(f"Camera USB sẵn sàng (OpenCV) "
+                    f"({cau_hinh.chieu_rong}x{cau_hinh.chieu_cao}@{cau_hinh.fps}fps)")
+
+    def read(self):
+        """Đọc frame, trả về (success, bgr_frame)."""
+        if self._picam2:
+            frame = self._picam2.capture_array()
+            # picamera2 trả RGB, chuyển sang BGR cho OpenCV
+            return True, cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+        return self._cv2_cap.read()
+
+    def release(self):
+        if self._picam2:
+            self._picam2.close()
+            self._picam2 = None
+        if self._cv2_cap:
+            self._cv2_cap.release()
+            self._cv2_cap = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.release()
+
+
 @contextmanager
-def mo_camera(cau_hinh: CauHinhCamera) -> Generator[cv2.VideoCapture, None, None]:
-    may_quay = cv2.VideoCapture(cau_hinh.id_camera)
-    may_quay.set(cv2.CAP_PROP_FRAME_WIDTH, cau_hinh.chieu_rong)
-    may_quay.set(cv2.CAP_PROP_FRAME_HEIGHT, cau_hinh.chieu_cao)
-    may_quay.set(cv2.CAP_PROP_FPS, cau_hinh.fps)
-    if not may_quay.isOpened():
-        raise RuntimeError(f"Không thể mở camera {cau_hinh.id_camera}")
-    logger.info(f"Camera sẵn sàng ({cau_hinh.chieu_rong}x{cau_hinh.chieu_cao}@{cau_hinh.fps}fps)")
+def mo_camera(cau_hinh: CauHinhCamera) -> Generator[CameraCapture, None, None]:
+    may_quay = CameraCapture(cau_hinh)
     try:
         yield may_quay
     finally:
