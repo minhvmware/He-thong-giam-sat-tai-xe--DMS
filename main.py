@@ -290,7 +290,11 @@ class HeThongGiamSatTaiXe:
     # Tracking
     _thoi_gian_buon_ngu_bat_dau: Optional[float] = field(default=None, repr=False)
     _thoi_gian_am_thanh_cuoi: float = field(default=0.0, repr=False)
-    _tts_cooldown: dict = field(default_factory=dict, repr=False)
+    # TTS: theo dõi thời gian bắt đầu mỗi loại cảnh báo
+    _tts_bat_dau: dict = field(default_factory=dict, repr=False)
+    _tts_da_phat: dict = field(default_factory=dict, repr=False)
+    _TTS_DELAY: float = 3.0  # Phải liên tục 3s mới phát TTS
+    _TTS_COOLDOWN: float = 8.0  # Cooldown giữa các lần phát cùng loại
 
     def __post_init__(self) -> None:
         logger.info("Khởi tạo DMS...")
@@ -305,13 +309,32 @@ class HeThongGiamSatTaiXe:
         logger.info(f"DMS sẵn sàng! [{mode}] [{tts}] [Loa: {audio}]")
 
     def _canh_bao_tts(self, loai: str) -> None:
-        """Phát TTS cảnh báo (có cooldown 5s mỗi loại)."""
+        """Phát TTS sau 3s liên tục cảnh báo (tránh false positive)."""
         if not self.tts_bat:
             return
         ts = time.time()
-        if ts - self._tts_cooldown.get(loai, 0) < 5.0:
+
+        # Bắt đầu đếm nếu chưa có
+        if loai not in self._tts_bat_dau:
+            self._tts_bat_dau[loai] = ts
+            self._tts_da_phat[loai] = False
             return
-        self._tts_cooldown[loai] = ts
+
+        # Chưa đủ 3s → chờ tiếp
+        thoi_gian = ts - self._tts_bat_dau[loai]
+        if thoi_gian < self._TTS_DELAY:
+            return
+
+        # Đã phát rồi → kiểm tra cooldown
+        if self._tts_da_phat.get(loai, False):
+            # Reset sau cooldown để có thể phát lại
+            if thoi_gian >= self._TTS_DELAY + self._TTS_COOLDOWN:
+                self._tts_bat_dau[loai] = ts
+                self._tts_da_phat[loai] = False
+            return
+
+        # Đủ 3s + chưa phát → PHÁT TTS
+        self._tts_da_phat[loai] = True
         van_ban = TTS_CANH_BAO.get(loai, "")
         if van_ban:
             t = threading.Thread(
@@ -321,6 +344,12 @@ class HeThongGiamSatTaiXe:
                 daemon=True
             )
             t.start()
+            logger.info(f"🔊 TTS [{loai}]: {van_ban}")
+
+    def _reset_tts(self, loai: str) -> None:
+        """Reset timer khi cảnh báo hết."""
+        self._tts_bat_dau.pop(loai, None)
+        self._tts_da_phat.pop(loai, None)
 
     def chay(self) -> None:
         if self.headless:
@@ -376,14 +405,20 @@ class HeThongGiamSatTaiXe:
         # ========== CẢNH BÁO NGÁP ==========
         if ket_qua_mat['canh_bao_ngap']:
             self._canh_bao_tts('ngap')
+        else:
+            self._reset_tts('ngap')
 
         # ========== CẢNH BÁO TƯ THẾ ==========
         if ket_qua_mat['canh_bao_tu_the']:
             self._canh_bao_tts('tu_the')
+        else:
+            self._reset_tts('tu_the')
 
         # ========== CẢNH BÁO MẤT TẬP TRUNG ==========
         if ket_qua_tay['distraction_alert']:
             self._canh_bao_tts('mat_tap_trung')
+        else:
+            self._reset_tts('mat_tap_trung')
 
         dau_ra = anh_tang_cuong.copy()
         if ket_qua_mat['mat_phat_hien']:
