@@ -8,6 +8,8 @@ Nhấn 'q' để thoát.
 from __future__ import annotations
 import argparse
 import logging
+import shutil
+import subprocess
 import sys
 import time
 import threading
@@ -62,52 +64,104 @@ class CauHinhCamera:
 
 
 class CameraCapture:
-    """Wrapper hỗ trợ cả picamera2 (CSI trên Pi) và OpenCV (USB webcam)."""
+    """Wrapper hỗ trợ: picamera2 → rpicam-vid → OpenCV."""
 
     def __init__(self, cau_hinh: CauHinhCamera):
         self._picam2 = None
+        self._rpicam_proc = None
         self._cv2_cap = None
+        self._width = cau_hinh.chieu_rong
+        self._height = cau_hinh.chieu_cao
+        # Kích thước 1 frame YUV420: w * h * 1.5
+        self._yuv_frame_size = self._width * self._height * 3 // 2
 
-        # Thử picamera2 trước (CSI camera trên Raspberry Pi)
+        # === 1. Thử picamera2 (CSI + libcamera bindings) ===
         try:
             from picamera2 import Picamera2
             self._picam2 = Picamera2()
             config = self._picam2.create_preview_configuration(
-                main={"size": (cau_hinh.chieu_rong, cau_hinh.chieu_cao), "format": "RGB888"}
+                main={"size": (self._width, self._height), "format": "RGB888"}
             )
             self._picam2.configure(config)
             self._picam2.start()
-            logger.info(f"Camera CSI sẵn sàng (picamera2) "
-                        f"({cau_hinh.chieu_rong}x{cau_hinh.chieu_cao})")
+            logger.info(f"Camera CSI sẵn sàng (picamera2) ({self._width}x{self._height})")
             return
-        except ImportError:
-            logger.info("picamera2 không có, thử OpenCV...")
+        except (ImportError, ModuleNotFoundError):
+            logger.info("picamera2/libcamera không có, thử rpicam-vid...")
         except Exception as e:
-            logger.warning(f"picamera2 lỗi: {e}, thử OpenCV...")
+            logger.warning(f"picamera2 lỗi: {e}, thử rpicam-vid...")
             self._picam2 = None
 
-        # Fallback: OpenCV VideoCapture (USB webcam / desktop)
+        # === 2. Thử rpicam-vid subprocess (CSI, không cần Python bindings) ===
+        if shutil.which("rpicam-vid"):
+            try:
+                self._rpicam_proc = subprocess.Popen(
+                    [
+                        "rpicam-vid", "-t", "0",
+                        "--width", str(self._width),
+                        "--height", str(self._height),
+                        "--framerate", str(cau_hinh.fps),
+                        "--codec", "yuv420",
+                        "--nopreview", "-o", "-"
+                    ],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                )
+                # Đọc thử frame đầu tiên để xác nhận hoạt động
+                test_data = self._rpicam_proc.stdout.read(self._yuv_frame_size)
+                if len(test_data) == self._yuv_frame_size:
+                    self._first_frame = test_data
+                    logger.info(f"Camera CSI sẵn sàng (rpicam-vid) "
+                                f"({self._width}x{self._height}@{cau_hinh.fps}fps)")
+                    return
+                else:
+                    raise RuntimeError("rpicam-vid không trả về frame hợp lệ")
+            except Exception as e:
+                logger.warning(f"rpicam-vid lỗi: {e}, thử OpenCV...")
+                if self._rpicam_proc:
+                    self._rpicam_proc.terminate()
+                    self._rpicam_proc = None
+
+        # === 3. Fallback: OpenCV VideoCapture (USB webcam / desktop) ===
         self._cv2_cap = cv2.VideoCapture(cau_hinh.id_camera)
-        self._cv2_cap.set(cv2.CAP_PROP_FRAME_WIDTH, cau_hinh.chieu_rong)
-        self._cv2_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, cau_hinh.chieu_cao)
+        self._cv2_cap.set(cv2.CAP_PROP_FRAME_WIDTH, self._width)
+        self._cv2_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self._height)
         self._cv2_cap.set(cv2.CAP_PROP_FPS, cau_hinh.fps)
         if not self._cv2_cap.isOpened():
             raise RuntimeError(f"Không thể mở camera {cau_hinh.id_camera}")
         logger.info(f"Camera USB sẵn sàng (OpenCV) "
-                    f"({cau_hinh.chieu_rong}x{cau_hinh.chieu_cao}@{cau_hinh.fps}fps)")
+                    f"({self._width}x{self._height}@{cau_hinh.fps}fps)")
 
     def read(self):
         """Đọc frame, trả về (success, bgr_frame)."""
         if self._picam2:
             frame = self._picam2.capture_array()
-            # picamera2 trả RGB, chuyển sang BGR cho OpenCV
             return True, cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+
+        if self._rpicam_proc:
+            # Nếu có frame đầu tiên đã đọc khi khởi tạo
+            if hasattr(self, '_first_frame') and self._first_frame is not None:
+                data = self._first_frame
+                self._first_frame = None
+            else:
+                data = self._rpicam_proc.stdout.read(self._yuv_frame_size)
+            if len(data) != self._yuv_frame_size:
+                return False, None
+            yuv = np.frombuffer(data, dtype=np.uint8).reshape(
+                (self._height * 3 // 2, self._width))
+            bgr = cv2.cvtColor(yuv, cv2.COLOR_YUV2BGR_I420)
+            return True, bgr
+
         return self._cv2_cap.read()
 
     def release(self):
         if self._picam2:
             self._picam2.close()
             self._picam2 = None
+        if self._rpicam_proc:
+            self._rpicam_proc.terminate()
+            self._rpicam_proc.wait(timeout=3)
+            self._rpicam_proc = None
         if self._cv2_cap:
             self._cv2_cap.release()
             self._cv2_cap = None
