@@ -9,7 +9,7 @@ import time
 import threading
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Generator, Optional, Union
+from typing import Generator, Optional
 import cv2
 import numpy as np
 from dms.preprocessing import TienXuLyCLAHE
@@ -19,6 +19,39 @@ from dms.visualization import TraoDuaTinhNang
 from dms.constants import THOI_GIAN_CANH_BAO_AM_THANH, KHOANG_CACH_AM_THANH
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+_web_frame_lock = threading.Lock()
+_latest_web_frame = None
+
+def chay_web_server():
+    try:
+        from flask import Flask, Response
+        app = Flask(__name__)
+        @app.route('/')
+        def index():
+            html = "<html><body style='margin:0;background:#000;text-align:center;'>" \
+                   "<h2 style='color:#fff;font-family:sans-serif;'>DMS Live View</h2>" \
+                   "<img src='/video_feed' style='max-width:100%; max-height:90vh;'></body></html>"
+            return html
+        def gen():
+            global _latest_web_frame
+            while True:
+                with _web_frame_lock:
+                    frame = _latest_web_frame
+                if frame is None:
+                    time.sleep(0.05)
+                    continue
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+        @app.route('/video_feed')
+        def video_feed():
+            return Response(gen(), mimetype='multipart/x-mixed-replace; boundary=frame')
+        log = logging.getLogger('werkzeug')
+        log.setLevel(logging.ERROR)
+        logger.info("Khởi động Web Stream tại http://<IP_cua_Pi>:5000/")
+        app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
+    except ImportError:
+        logger.warning("Chưa cài Flask. (Hãy sửa lỗi bằng: pip install flask)")
 def liet_ke_thiet_bi_am_thanh() -> list[str]:
     try:
         result = subprocess.run(
@@ -86,7 +119,7 @@ def phat_tts(van_ban: str, device: Optional[str] = None, ngon_ngu: str = "vi") -
         logger.warning(f"TTS lỗi: {e}")
 @dataclass
 class CauHinhCamera:
-    id_camera: Union[int, str] = 0
+    id_camera: int = 0
     chieu_rong: int = 640
     chieu_cao: int = 480
     fps: int = 30
@@ -98,51 +131,48 @@ class CameraCapture:
         self._width = cau_hinh.chieu_rong
         self._height = cau_hinh.chieu_cao
         self._yuv_frame_size = self._width * self._height * 3 // 2
-
-        # Chỉ thử CSI camera (picamera2, rpicam-vid) nếu là cam local mặc định (ID = 0)
-        is_local_default_cam = (isinstance(cau_hinh.id_camera, int) and cau_hinh.id_camera == 0)
-
-        if is_local_default_cam:
+        try:
+            from picamera2 import Picamera2
+            self._picam2 = Picamera2()
+            config = self._picam2.create_preview_configuration(
+                main={"size": (self._width, self._height), "format": "RGB888"}
+            )
+            self._picam2.configure(config)
+            self._picam2.start()
+            logger.info(f"Camera CSI sẵn sàng (picamera2) ({self._width}x{self._height})")
+            return
+        except (ImportError, ModuleNotFoundError):
+            logger.info("picamera2/libcamera không có, thử rpicam-vid...")
+        except Exception as e:
+            logger.warning(f"picamera2 lỗi: {e}, thử rpicam-vid...")
+            self._picam2 = None
+        if shutil.which("rpicam-vid"):
             try:
-                from picamera2 import Picamera2
-                self._picam2 = Picamera2()
-                config = self._picam2.create_preview_configuration(
-                    main={"size": (self._width, self._height), "format": "RGB888"}
+                self._rpicam_proc = subprocess.Popen(
+                    [
+                        "rpicam-vid", "-t", "0",
+                        "--width", str(self._width),
+                        "--height", str(self._height),
+                        "--framerate", str(cau_hinh.fps),
+                        "--codec", "yuv420",
+                        "--nopreview", "-o", "-"
+                    ],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
                 )
-                self._picam2.configure(config)
-                self._picam2.start()
-                logger.info(f"Camera CSI sẵn sàng (picamera2) ({self._width}x{self._height})")
-                return
-            except (ImportError, ModuleNotFoundError):
-                pass
+                test_data = self._rpicam_proc.stdout.read(self._yuv_frame_size)
+                if len(test_data) == self._yuv_frame_size:
+                    self._first_frame = test_data
+                    logger.info(f"Camera CSI sẵn sàng (rpicam-vid) "
+                                f"({self._width}x{self._height}@{cau_hinh.fps}fps)")
+                    return
+                else:
+                    raise RuntimeError("rpicam-vid không trả về frame hợp lệ")
             except Exception as e:
-                self._picam2 = None
-
-            if shutil.which("rpicam-vid"):
-                try:
-                    self._rpicam_proc = subprocess.Popen(
-                        [
-                            "rpicam-vid", "-t", "0",
-                            "--width", str(self._width),
-                            "--height", str(self._height),
-                            "--framerate", str(cau_hinh.fps),
-                            "--codec", "yuv420",
-                            "--nopreview", "-o", "-"
-                        ],
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.DEVNULL,
-                    )
-                    test_data = self._rpicam_proc.stdout.read(self._yuv_frame_size)
-                    if len(test_data) == self._yuv_frame_size:
-                        self._first_frame = test_data
-                        logger.info(f"Camera CSI sẵn sàng (rpicam-vid) "
-                                    f"({self._width}x{self._height}@{cau_hinh.fps}fps)")
-                        return
-                except Exception as e:
-                    if self._rpicam_proc:
-                        self._rpicam_proc.terminate()
-                        self._rpicam_proc = None
-
+                logger.warning(f"rpicam-vid lỗi: {e}, thử OpenCV...")
+                if self._rpicam_proc:
+                    self._rpicam_proc.terminate()
+                    self._rpicam_proc = None
         self._cv2_cap = cv2.VideoCapture(cau_hinh.id_camera)
         self._cv2_cap.set(cv2.CAP_PROP_FRAME_WIDTH, self._width)
         self._cv2_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self._height)
@@ -216,6 +246,7 @@ class HeThongGiamSatTaiXe:
     headless: bool = False
     tts_bat: bool = False
     audio_device: Optional[str] = None
+    web_stream: bool = False
     _tien_xu_ly: TienXuLyCLAHE = field(init=False, repr=False)
     _phan_tich_mat: PhanTichMat = field(init=False, repr=False)
     _theo_doi_tay: TheoDoiTay = field(init=False, repr=False)
@@ -273,6 +304,8 @@ class HeThongGiamSatTaiXe:
             logger.info("Chế độ headless — không hiển thị cửa sổ. Ctrl+C để tắt.")
         else:
             logger.info("Đang chạy... Nhấn 'q' để thoát.")
+        if self.web_stream:
+            threading.Thread(target=chay_web_server, daemon=True).start()
         with mo_camera(self.cau_hinh_camera) as may_quay:
             while True:
                 thanh_cong, khung_hinh = may_quay.read()
@@ -281,6 +314,14 @@ class HeThongGiamSatTaiXe:
                     time.sleep(0.1)
                     continue
                 dau_ra = self._xu_ly(khung_hinh)
+
+                if self.web_stream:
+                    thanh_cong_encode, buffer = cv2.imencode('.jpg', dau_ra)
+                    if thanh_cong_encode:
+                        global _latest_web_frame
+                        with _web_frame_lock:
+                            _latest_web_frame = buffer.tobytes()
+
                 if not self.headless:
                     cv2.imshow(self.ten_cua_so, dau_ra)
                     if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -347,14 +388,16 @@ class HeThongGiamSatTaiXe:
         logger.info("Đã tắt DMS.")
 def main() -> int:
     parser = argparse.ArgumentParser(description="Hệ Thống Giám Sát Tài Xế (DMS)")
-    parser.add_argument("--camera", "-c", type=str, default="0",
-                        help="ID camera cục bộ (0, 1...) hoặc IP Stream URL (http://...)")
+    parser.add_argument("--camera", "-c", type=int, default=0,
+                        help="ID camera (mặc định: 0)")
     parser.add_argument("--width", "-W", type=int, default=640)
     parser.add_argument("--height", "-H", type=int, default=480)
     parser.add_argument("--headless", action="store_true",
                         help="Chạy không hiển thị (dùng cho auto-start)")
     parser.add_argument("--tts", action="store_true",
                         help="Bật cảnh báo giọng nói (espeak-ng)")
+    parser.add_argument("--web", action="store_true",
+                        help="Phát Web Stream tại cổng 5000 để điện thoại canh góc nhìn")
     parser.add_argument("--audio-device", type=str, default=None,
                         help="Thiết bị âm thanh ALSA (VD: plughw:1,0)")
     parser.add_argument("--list-audio", action="store_true",
@@ -370,19 +413,14 @@ def main() -> int:
         else:
             print("  Không tìm thấy thiết bị nào.")
         return 0
-    
-    # Xử lý input camera: số nguyên (local cam) hoặc chuỗi (URL/IP cam)
-    camera_val = args.camera
-    if camera_val.isdigit():
-        camera_val = int(camera_val)
-
     try:
-        cau_hinh = CauHinhCamera(camera_val, args.width, args.height)
+        cau_hinh = CauHinhCamera(args.camera, args.width, args.height)
         dms = HeThongGiamSatTaiXe(
             cau_hinh_camera=cau_hinh,
             headless=args.headless,
             tts_bat=args.tts,
             audio_device=args.audio_device,
+            web_stream=args.web
         )
         dms.chay()
         return 0
