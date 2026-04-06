@@ -237,6 +237,7 @@ TTS_CANH_BAO = {
     'ngap': "Bạn đang ngáp, hãy nghỉ ngơi!",
     'tu_the': "Hãy nhìn thẳng về phía trước!",
     'mat_tap_trung': "Tập trung lái xe!",
+    'con': "Cảnh báo! Phát hiện nồng độ cồn! Vui lòng tắt máy và không lái xe!",
 }
 @dataclass
 class HeThongGiamSatTaiXe:
@@ -247,6 +248,7 @@ class HeThongGiamSatTaiXe:
     tts_bat: bool = False
     audio_device: Optional[str] = None
     web_stream: bool = False
+    mq3_pin: Optional[int] = None
     _tien_xu_ly: TienXuLyCLAHE = field(init=False, repr=False)
     _phan_tich_mat: PhanTichMat = field(init=False, repr=False)
     _theo_doi_tay: TheoDoiTay = field(init=False, repr=False)
@@ -258,6 +260,8 @@ class HeThongGiamSatTaiXe:
     _tts_da_phat: dict = field(default_factory=dict, repr=False)
     _TTS_DELAY: float = 3.0  
     _TTS_COOLDOWN: float = 8.0  
+    _cam_bien_con: object = field(init=False, default=None, repr=False)
+    _co_con: bool = field(init=False, default=False, repr=False)
     def __post_init__(self) -> None:
         logger.info("Khởi tạo DMS...")
         self._tien_xu_ly = TienXuLyCLAHE()
@@ -269,6 +273,22 @@ class HeThongGiamSatTaiXe:
         tts = "TTS bật" if self.tts_bat else "TTS tắt"
         audio = self.audio_device or "mặc định"
         logger.info(f"DMS sẵn sàng! [{mode}] [{tts}] [Loa: {audio}]")
+
+        if self.mq3_pin is not None:
+            try:
+                from gpiozero import DigitalInputDevice
+                self._cam_bien_con = DigitalInputDevice(self.mq3_pin)
+                def doc_con():
+                    while True:
+                        self._co_con = getattr(self._cam_bien_con, 'is_active', False)
+                        time.sleep(0.5)
+                threading.Thread(target=doc_con, daemon=True).start()
+                logger.info(f"Đã kích hoạt cảm biến MQ-3 (nồng độ cồn) tại GPIO {self.mq3_pin}")
+            except ImportError:
+                logger.warning(f"Chưa cài gpiozero. Bỏ qua cảm biến GPIO {self.mq3_pin}.")
+            except Exception as e:
+                logger.warning(f"Không thể khởi tạo GPIO {self.mq3_pin} cho cảm biến cồn: {e}")
+
     def _canh_bao_tts(self, loai: str) -> None:
         if not self.tts_bat:
             return
@@ -363,6 +383,10 @@ class HeThongGiamSatTaiXe:
             self._canh_bao_tts('mat_tap_trung')
         else:
             self._reset_tts('mat_tap_trung')
+        if self._co_con:
+            self._canh_bao_tts('con')
+        else:
+            self._reset_tts('con')
         dau_ra = anh_tang_cuong.copy()
         if ket_qua_mat['mat_phat_hien']:
             dau_ra = self._trao_dua_tinh_nang.ve_luoi_mat(dau_ra, ket_qua_mat['diem_moc'])
@@ -378,7 +402,7 @@ class HeThongGiamSatTaiXe:
                                      ket_qua_mat['roll'], fps)
         dau_ra = self._trao_dua_tinh_nang.ve_canh_bao(dau_ra, ket_qua_mat['canh_bao_buon_ngu'],
                                     ket_qua_mat['canh_bao_ngap'], ket_qua_mat['canh_bao_tu_the'],
-                                    ket_qua_tay['distraction_alert'])
+                                    ket_qua_tay['distraction_alert'], self._co_con)
         return dau_ra
     def _dung(self) -> None:
         self._phan_tich_mat.release()
@@ -402,6 +426,8 @@ def main() -> int:
                         help="Thiết bị âm thanh ALSA (VD: plughw:1,0)")
     parser.add_argument("--list-audio", action="store_true",
                         help="Liệt kê thiết bị âm thanh rồi thoát")
+    parser.add_argument("--mq3-pin", type=int, default=None,
+                        help="Chân GPIO cắm mạch MQ-3 đo nồng độ cồn (VD: 4)")
     args = parser.parse_args()
     if args.list_audio:
         print("=== Thiết bị âm thanh ===")
@@ -420,7 +446,8 @@ def main() -> int:
             headless=args.headless,
             tts_bat=args.tts,
             audio_device=args.audio_device,
-            web_stream=args.web
+            web_stream=args.web,
+            mq3_pin=args.mq3_pin
         )
         dms.chay()
         return 0

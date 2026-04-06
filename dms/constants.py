@@ -7,6 +7,7 @@ class AlertType(Enum):
     YAWN = "PHAT HIEN NGAP"
     HEAD_POSE = "NHIN VE PHIA TRUOC!"
     DISTRACTION = "CANH BAO MAT TAP TRUNG!"
+    ALCOHOL = "PHAT HIEN NONG DO CON!"
 @dataclass(frozen=True, slots=True)
 class DrowsinessConfig:
     nguong_ear: float = 0.2  

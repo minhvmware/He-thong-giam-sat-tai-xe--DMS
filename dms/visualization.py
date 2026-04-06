@@ -63,9 +63,10 @@ class TraoDuaTinhNang:
                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, mau_sac, 1)
         return khung_hinh
     def ve_canh_bao(self, khung_hinh: np.ndarray, buon_ngu=False, ngap=False,
-                    tu_the=False, mat_tap_trung=False) -> np.ndarray:
+                    tu_the=False, mat_tap_trung=False, con=False) -> np.ndarray:
         chieu_cao, chieu_rong = khung_hinh.shape[:2]
         danh_sach_canh_bao = []
+        if con: danh_sach_canh_bao.append(AlertType.ALCOHOL.value)
         if buon_ngu: danh_sach_canh_bao.append(AlertType.DROWSINESS.value)
         if ngap: danh_sach_canh_bao.append(AlertType.YAWN.value)
         if tu_the: danh_sach_canh_bao.append(AlertType.HEAD_POSE.value)
