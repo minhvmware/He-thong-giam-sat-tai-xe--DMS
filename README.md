@@ -1,6 +1,7 @@
 # Hệ Thống Giám Sát Tài Xế (DMS)
 
-Hệ thống giám sát tài xế thời gian thực sử dụng OpenCV và MediaPipe, tối ưu hóa cho CPU.
+Hệ thống giám sát tài xế thời gian thực sử dụng OpenCV và MediaPipe. 
+Đặc biệt được tinh chỉnh để **hoạt động mượt mà trên Raspberry Pi 4 và Raspberry Pi 5**, đồng thời **hỗ trợ tối đa hiệu năng khi kết hợp với Raspberry Pi AI Kit (NPU)**.
 
 ## Tính Năng
 
