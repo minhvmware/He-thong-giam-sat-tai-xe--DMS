@@ -1,13 +1,20 @@
 """
 Hệ Thống Giám Sát Tài Xế (DMS)
 
-Sử dụng: python main.py [--camera 0] [--width 640] [--height 480]
-Nhấn 'q' để thoát.
+Sử dụng:
+    python main.py                          # Chạy bình thường
+    python main.py --headless               # Không hiển thị (dùng cho Pi auto-start)
+    python main.py --list-audio             # Liệt kê loa
+    python main.py --audio-device plughw:1  # Chọn loa ALSA
+    python main.py --tts                    # Bật cảnh báo giọng nói
+
+Nhấn 'q' để thoát (nếu có màn hình).
 """
 
 from __future__ import annotations
 import argparse
 import logging
+import os
 import shutil
 import subprocess
 import sys
@@ -28,32 +35,91 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 
-def _khoi_tao_mixer():
-    """Khởi tạo pygame mixer một lần."""
+# ==================== ÂM THANH & TTS ====================
+
+def liet_ke_thiet_bi_am_thanh() -> list[str]:
+    """Liệt kê các thiết bị âm thanh ALSA (aplay -l)."""
+    try:
+        result = subprocess.run(
+            ["aplay", "-l"], capture_output=True, text=True, timeout=5
+        )
+        lines = []
+        for line in result.stdout.splitlines():
+            if line.startswith("card "):
+                lines.append(line.strip())
+        return lines
+    except Exception:
+        return []
+
+
+def _phat_wav_alsa(duong_dan: str, device: Optional[str] = None) -> None:
+    """Phát file âm thanh bằng aplay (ALSA)."""
+    cmd = ["aplay"]
+    if device:
+        cmd.extend(["-D", device])
+    cmd.append(duong_dan)
+    subprocess.run(cmd, stderr=subprocess.DEVNULL, timeout=30)
+
+
+def _phat_mp3_pygame(duong_dan: str, device: Optional[str] = None) -> None:
+    """Phát file MP3 bằng pygame mixer."""
     try:
         import pygame
         if not pygame.mixer.get_init():
+            if device:
+                os.environ["SDL_AUDIODRIVER"] = "alsa"
+                os.environ["AUDIODEV"] = device
             pygame.mixer.init()
-        return True
-    except Exception as e:
-        logger.warning(f"Không thể khởi tạo pygame mixer: {e}")
-        return False
-
-
-def phat_am_thanh_async(duong_dan: str) -> None:
-    """Phát âm thanh trong thread riêng để không block."""
-    try:
-        import pygame
-        if not _khoi_tao_mixer():
-            return
         pygame.mixer.music.load(duong_dan)
         pygame.mixer.music.play()
+        # Đợi phát xong
+        while pygame.mixer.music.get_busy():
+            time.sleep(0.1)
+    except Exception as e:
+        logger.warning(f"pygame lỗi: {e}")
+
+
+def phat_am_thanh(duong_dan: str, device: Optional[str] = None) -> None:
+    """Phát file âm thanh (MP3/WAV). Tự chọn backend phù hợp."""
+    try:
+        if duong_dan.endswith(".wav"):
+            _phat_wav_alsa(duong_dan, device)
+        else:
+            _phat_mp3_pygame(duong_dan, device)
         logger.info(f"Phát âm thanh: {duong_dan}")
-    except ImportError:
-        logger.warning("Chưa cài pygame. Cài: pip install pygame")
     except Exception as e:
         logger.warning(f"Lỗi phát âm thanh: {e}")
 
+
+def phat_tts(van_ban: str, device: Optional[str] = None, ngon_ngu: str = "vi") -> None:
+    """Text-to-Speech bằng espeak-ng (có sẵn trên Pi OS)."""
+    if not shutil.which("espeak-ng"):
+        logger.warning("espeak-ng chưa cài. Cài: sudo apt install espeak-ng")
+        return
+    try:
+        if device:
+            # Pipe qua aplay để chọn loa
+            p1 = subprocess.Popen(
+                ["espeak-ng", "-v", ngon_ngu, "--stdout", van_ban],
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
+            )
+            p2 = subprocess.Popen(
+                ["aplay", "-D", device],
+                stdin=p1.stdout, stderr=subprocess.DEVNULL
+            )
+            p1.stdout.close()
+            p2.wait(timeout=10)
+        else:
+            subprocess.run(
+                ["espeak-ng", "-v", ngon_ngu, van_ban],
+                stderr=subprocess.DEVNULL, timeout=10
+            )
+        logger.info(f"TTS: {van_ban}")
+    except Exception as e:
+        logger.warning(f"TTS lỗi: {e}")
+
+
+# ==================== CAMERA ====================
 
 @dataclass
 class CauHinhCamera:
@@ -72,10 +138,9 @@ class CameraCapture:
         self._cv2_cap = None
         self._width = cau_hinh.chieu_rong
         self._height = cau_hinh.chieu_cao
-        # Kích thước 1 frame YUV420: w * h * 1.5
         self._yuv_frame_size = self._width * self._height * 3 // 2
 
-        # === 1. Thử picamera2 (CSI + libcamera bindings) ===
+        # === 1. Thử picamera2 ===
         try:
             from picamera2 import Picamera2
             self._picam2 = Picamera2()
@@ -92,7 +157,7 @@ class CameraCapture:
             logger.warning(f"picamera2 lỗi: {e}, thử rpicam-vid...")
             self._picam2 = None
 
-        # === 2. Thử rpicam-vid subprocess (CSI, không cần Python bindings) ===
+        # === 2. Thử rpicam-vid subprocess ===
         if shutil.which("rpicam-vid"):
             try:
                 self._rpicam_proc = subprocess.Popen(
@@ -107,7 +172,6 @@ class CameraCapture:
                     stdout=subprocess.PIPE,
                     stderr=subprocess.DEVNULL,
                 )
-                # Đọc thử frame đầu tiên để xác nhận hoạt động
                 test_data = self._rpicam_proc.stdout.read(self._yuv_frame_size)
                 if len(test_data) == self._yuv_frame_size:
                     self._first_frame = test_data
@@ -122,7 +186,7 @@ class CameraCapture:
                     self._rpicam_proc.terminate()
                     self._rpicam_proc = None
 
-        # === 3. Fallback: OpenCV VideoCapture (USB webcam / desktop) ===
+        # === 3. Fallback: OpenCV ===
         self._cv2_cap = cv2.VideoCapture(cau_hinh.id_camera)
         self._cv2_cap.set(cv2.CAP_PROP_FRAME_WIDTH, self._width)
         self._cv2_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self._height)
@@ -133,13 +197,11 @@ class CameraCapture:
                     f"({self._width}x{self._height}@{cau_hinh.fps}fps)")
 
     def read(self):
-        """Đọc frame, trả về (success, bgr_frame)."""
         if self._picam2:
             frame = self._picam2.capture_array()
             return True, cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
 
         if self._rpicam_proc:
-            # Nếu có frame đầu tiên đã đọc khi khởi tạo
             if hasattr(self, '_first_frame') and self._first_frame is not None:
                 data = self._first_frame
                 self._first_frame = None
@@ -182,13 +244,14 @@ def mo_camera(cau_hinh: CauHinhCamera) -> Generator[CameraCapture, None, None]:
         may_quay.release()
 
 
+# ==================== FPS ====================
+
 @dataclass
 class ThongKeFPS:
-    """Moving average FPS."""
     cua_so: int = 30
     _lich_su: list = field(default_factory=list, repr=False)
     _truoc: float = field(default_factory=time.time, repr=False)
-    
+
     def cap_nhat(self) -> float:
         bay_gio = time.time()
         self._lich_su.append(1.0 / max(bay_gio - self._truoc, 1e-6))
@@ -198,22 +261,37 @@ class ThongKeFPS:
         return sum(self._lich_su) / len(self._lich_su)
 
 
+# ==================== HỆ THỐNG CHÍNH ====================
+
+# Tin nhắn TTS cho từng loại cảnh báo
+TTS_CANH_BAO = {
+    'buon_ngu': "Cảnh báo! Bạn đang buồn ngủ! Hãy dừng xe nghỉ ngơi!",
+    'ngap': "Bạn đang ngáp, hãy nghỉ ngơi!",
+    'tu_the': "Hãy nhìn thẳng về phía trước!",
+    'mat_tap_trung': "Tập trung lái xe!",
+}
+
+
 @dataclass
 class HeThongGiamSatTaiXe:
     cau_hinh_camera: CauHinhCamera = field(default_factory=CauHinhCamera)
     ten_cua_so: str = "He Thong Giam Sat Tai Xe"
     duong_dan_am_thanh: str = "chiken-on-tree.mp3"
-    
+    headless: bool = False
+    tts_bat: bool = False
+    audio_device: Optional[str] = None
+
     _tien_xu_ly: TienXuLyCLAHE = field(init=False, repr=False)
     _phan_tich_mat: PhanTichMat = field(init=False, repr=False)
     _theo_doi_tay: TheoDoiTay = field(init=False, repr=False)
     _trao_dua_tinh_nang: TraoDuaTinhNang = field(init=False, repr=False)
     _fps: ThongKeFPS = field(init=False, repr=False)
-    
-    # Tracking buồn ngủ
+
+    # Tracking
     _thoi_gian_buon_ngu_bat_dau: Optional[float] = field(default=None, repr=False)
     _thoi_gian_am_thanh_cuoi: float = field(default=0.0, repr=False)
-    
+    _tts_cooldown: dict = field(default_factory=dict, repr=False)
+
     def __post_init__(self) -> None:
         logger.info("Khởi tạo DMS...")
         self._tien_xu_ly = TienXuLyCLAHE()
@@ -221,48 +299,92 @@ class HeThongGiamSatTaiXe:
         self._theo_doi_tay = TheoDoiTay()
         self._trao_dua_tinh_nang = TraoDuaTinhNang()
         self._fps = ThongKeFPS()
-        logger.info("DMS sẵn sàng!")
-    
+        mode = "headless" if self.headless else "GUI"
+        tts = "TTS bật" if self.tts_bat else "TTS tắt"
+        audio = self.audio_device or "mặc định"
+        logger.info(f"DMS sẵn sàng! [{mode}] [{tts}] [Loa: {audio}]")
+
+    def _canh_bao_tts(self, loai: str) -> None:
+        """Phát TTS cảnh báo (có cooldown 5s mỗi loại)."""
+        if not self.tts_bat:
+            return
+        ts = time.time()
+        if ts - self._tts_cooldown.get(loai, 0) < 5.0:
+            return
+        self._tts_cooldown[loai] = ts
+        van_ban = TTS_CANH_BAO.get(loai, "")
+        if van_ban:
+            t = threading.Thread(
+                target=phat_tts,
+                args=(van_ban,),
+                kwargs={"device": self.audio_device},
+                daemon=True
+            )
+            t.start()
+
     def chay(self) -> None:
-        logger.info("Đang chạy... Nhấn 'q' để thoát.")
+        if self.headless:
+            logger.info("Chế độ headless — không hiển thị cửa sổ. Ctrl+C để tắt.")
+        else:
+            logger.info("Đang chạy... Nhấn 'q' để thoát.")
+
         with mo_camera(self.cau_hinh_camera) as may_quay:
             while True:
                 thanh_cong, khung_hinh = may_quay.read()
                 if not thanh_cong:
-                    break
+                    logger.warning("Không đọc được frame, thử lại...")
+                    time.sleep(0.1)
+                    continue
                 dau_ra = self._xu_ly(khung_hinh)
-                cv2.imshow(self.ten_cua_so, dau_ra)
-                if cv2.waitKey(1) & 0xFF == ord('q'):
-                    break
+
+                if not self.headless:
+                    cv2.imshow(self.ten_cua_so, dau_ra)
+                    if cv2.waitKey(1) & 0xFF == ord('q'):
+                        break
         self._dung()
-    
+
     def _xu_ly(self, khung_hinh: np.ndarray) -> np.ndarray:
         ts = time.time()
         anh_tang_cuong = self._tien_xu_ly.tang_cuong(khung_hinh)
         ket_qua_mat = self._phan_tich_mat.analyze(anh_tang_cuong, ts)
         ket_qua_tay = self._theo_doi_tay.analyze(anh_tang_cuong, ket_qua_mat.get('khung_bbox_mat'))
         fps = self._fps.cap_nhat()
-        
-        # ========== TRACKING BUỒN NGỦ ==========
+
+        # ========== CẢNH BÁO BUỒN NGỦ ==========
         if ket_qua_mat['canh_bao_buon_ngu']:
             if self._thoi_gian_buon_ngu_bat_dau is None:
                 self._thoi_gian_buon_ngu_bat_dau = ts
             else:
                 thoi_gian_buon_ngu = ts - self._thoi_gian_buon_ngu_bat_dau
-                # Phát âm thanh nếu buồn ngủ >5s và cooldown đã hết
                 if thoi_gian_buon_ngu >= THOI_GIAN_CANH_BAO_AM_THANH and \
                    (ts - self._thoi_gian_am_thanh_cuoi) >= KHOANG_CACH_AM_THANH:
+                    # Phát âm thanh MP3
                     luong = threading.Thread(
-                        target=phat_am_thanh_async, 
+                        target=phat_am_thanh,
                         args=(self.duong_dan_am_thanh,),
+                        kwargs={"device": self.audio_device},
                         daemon=True
                     )
                     luong.start()
+                    # Phát TTS
+                    self._canh_bao_tts('buon_ngu')
                     self._thoi_gian_am_thanh_cuoi = ts
                     logger.warning(f"⚠️ CẢNH BÁO BUỒN NGỦ! Thời gian: {thoi_gian_buon_ngu:.1f}s")
         else:
             self._thoi_gian_buon_ngu_bat_dau = None
-        
+
+        # ========== CẢNH BÁO NGÁP ==========
+        if ket_qua_mat['canh_bao_ngap']:
+            self._canh_bao_tts('ngap')
+
+        # ========== CẢNH BÁO TƯ THẾ ==========
+        if ket_qua_mat['canh_bao_tu_the']:
+            self._canh_bao_tts('tu_the')
+
+        # ========== CẢNH BÁO MẤT TẬP TRUNG ==========
+        if ket_qua_tay['distraction_alert']:
+            self._canh_bao_tts('mat_tap_trung')
+
         dau_ra = anh_tang_cuong.copy()
         if ket_qua_mat['mat_phat_hien']:
             dau_ra = self._trao_dua_tinh_nang.ve_luoi_mat(dau_ra, ket_qua_mat['diem_moc'])
@@ -272,35 +394,66 @@ class HeThongGiamSatTaiXe:
                 dau_ra = self._trao_dua_tinh_nang.ve_truc_tu_the_dau(
                     dau_ra, ket_qua_mat['vec_quay'], ket_qua_mat['vec_tuan'],
                     (diem_moc[1].x*chieu_rong, diem_moc[1].y*chieu_cao))
-        
+
         dau_ra = self._trao_dua_tinh_nang.ve_diem_moc_tay(dau_ra, ket_qua_tay['hand_landmarks'])
         dau_ra = self._trao_dua_tinh_nang.ve_so_lieu(dau_ra, ket_qua_mat['ear'], ket_qua_mat['mar'],
-                                     ket_qua_mat['pitch'], ket_qua_mat['yaw'], 
+                                     ket_qua_mat['pitch'], ket_qua_mat['yaw'],
                                      ket_qua_mat['roll'], fps)
         dau_ra = self._trao_dua_tinh_nang.ve_canh_bao(dau_ra, ket_qua_mat['canh_bao_buon_ngu'],
                                     ket_qua_mat['canh_bao_ngap'], ket_qua_mat['canh_bao_tu_the'],
                                     ket_qua_tay['distraction_alert'])
         return dau_ra
-    
+
     def _dung(self) -> None:
         self._phan_tich_mat.release()
         self._theo_doi_tay.release()
-        cv2.destroyAllWindows()
+        if not self.headless:
+            cv2.destroyAllWindows()
         logger.info("Đã tắt DMS.")
 
 
+# ==================== CLI ====================
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Driver Monitoring System")
-    parser.add_argument("--camera", "-c", type=int, default=0)
+    parser = argparse.ArgumentParser(description="Hệ Thống Giám Sát Tài Xế (DMS)")
+    parser.add_argument("--camera", "-c", type=int, default=0,
+                        help="ID camera (mặc định: 0)")
     parser.add_argument("--width", "-W", type=int, default=640)
     parser.add_argument("--height", "-H", type=int, default=480)
+    parser.add_argument("--headless", action="store_true",
+                        help="Chạy không hiển thị (dùng cho auto-start)")
+    parser.add_argument("--tts", action="store_true",
+                        help="Bật cảnh báo giọng nói (espeak-ng)")
+    parser.add_argument("--audio-device", type=str, default=None,
+                        help="Thiết bị âm thanh ALSA (VD: plughw:1,0)")
+    parser.add_argument("--list-audio", action="store_true",
+                        help="Liệt kê thiết bị âm thanh rồi thoát")
     args = parser.parse_args()
-    
+
+    # Liệt kê loa
+    if args.list_audio:
+        print("=== Thiết bị âm thanh ===")
+        devices = liet_ke_thiet_bi_am_thanh()
+        if devices:
+            for d in devices:
+                print(f"  {d}")
+            print("\nDùng: --audio-device plughw:<card>,<device>")
+        else:
+            print("  Không tìm thấy thiết bị nào.")
+        return 0
+
     try:
         cau_hinh = CauHinhCamera(args.camera, args.width, args.height)
-        HeThongGiamSatTaiXe(cau_hinh).chay()
+        dms = HeThongGiamSatTaiXe(
+            cau_hinh_camera=cau_hinh,
+            headless=args.headless,
+            tts_bat=args.tts,
+            audio_device=args.audio_device,
+        )
+        dms.chay()
         return 0
     except KeyboardInterrupt:
+        logger.info("Tắt bởi Ctrl+C")
         return 0
     except Exception as e:
         logger.error(f"Lỗi: {e}", exc_info=True)

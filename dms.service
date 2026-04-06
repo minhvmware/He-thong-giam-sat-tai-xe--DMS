@@ -1,0 +1,16 @@
+[Unit]
+Description=He Thong Giam Sat Tai Xe (DMS)
+After=multi-user.target
+
+[Service]
+Type=simple
+User=minh
+WorkingDirectory=/home/minh/He-thong-giam-sat-tai-xe--DMS
+ExecStart=/bin/bash /home/minh/He-thong-giam-sat-tai-xe--DMS/start_dms.sh
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
