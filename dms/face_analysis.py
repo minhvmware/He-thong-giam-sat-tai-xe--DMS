@@ -39,7 +39,7 @@ class PhanTichMat:
     so_mat_toi_da: int = 1
     do_tin_cay_phat_hien: float = 0.5
     do_tin_cay_theo_doi: float = 0.5
-    tinh_toan_diem_chi_tiet: bool = True
+    tinh_toan_diem_chi_tiet: bool = False
     _luoi_mat: mp.solutions.face_mesh.FaceMesh = field(init=False, repr=False)
     _bo_loc_ear: BoLocOneEuro = field(default_factory=BoLocOneEuro, repr=False)
     _bo_loc_mar: BoLocOneEuro = field(default_factory=BoLocOneEuro, repr=False)

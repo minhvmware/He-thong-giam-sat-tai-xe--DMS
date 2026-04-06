@@ -51,6 +51,7 @@ class TheoDoiTay:
     def __post_init__(self) -> None:
         self._tay = mp.solutions.hands.Hands(
             max_num_hands=self.so_tay_toi_da,
+            model_complexity=0,
             min_detection_confidence=self.do_tin_cay_phat_hien,
             min_tracking_confidence=self.do_tin_cay_theo_doi
         )
