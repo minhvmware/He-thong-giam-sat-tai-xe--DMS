@@ -23,7 +23,7 @@ class DrowsinessConfig:
     """Ngưỡng phát hiện buồn ngủ - đã test thực tế."""
     nguong_ear: float = 0.2  # Test với 20 người, cân bằng độ nhạy
     so_khung_ear: int = 15  # ~0.5s ở 30fps, filter blink bình thường
-    nguong_mar: float = 1.3   # Từ paper Driver Yawning Detection (2017)
+    nguong_mar: float = 1.25   # Từ paper Driver Yawning Detection (2017)
     thoi_gian_canh_bao_am_thanh: float = 5.0  # Phát âm thanh nếu buồn ngủ >5s
     khoang_cach_am_thanh: float = 2.0  # Tránh phát âm thanh liên tục, cooldown 2s
 

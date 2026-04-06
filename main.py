@@ -26,14 +26,29 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 
+def _khoi_tao_mixer():
+    """Khởi tạo pygame mixer một lần."""
+    try:
+        import pygame
+        if not pygame.mixer.get_init():
+            pygame.mixer.init()
+        return True
+    except Exception as e:
+        logger.warning(f"Không thể khởi tạo pygame mixer: {e}")
+        return False
+
+
 def phat_am_thanh_async(duong_dan: str) -> None:
     """Phát âm thanh trong thread riêng để không block."""
     try:
-        import playsound
-        playsound.playsound(duong_dan, block=False)
+        import pygame
+        if not _khoi_tao_mixer():
+            return
+        pygame.mixer.music.load(duong_dan)
+        pygame.mixer.music.play()
         logger.info(f"Phát âm thanh: {duong_dan}")
     except ImportError:
-        logger.warning("Chưa cài playsound. Cài: pip install playsound")
+        logger.warning("Chưa cài pygame. Cài: pip install pygame")
     except Exception as e:
         logger.warning(f"Lỗi phát âm thanh: {e}")
 
