@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=DMS - Giam Sat Tai Xe
+Comment=He Thong Giam Sat Tai Xe tu dong chay khi khoi dong
+Exec=/bin/bash /home/minh/He-thong-giam-sat-tai-xe--DMS/start_dms.sh
+Terminal=false
+X-GNOME-Autostart-enabled=true
