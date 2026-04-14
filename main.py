@@ -280,7 +280,7 @@ class HeThongGiamSatTaiXe:
                 self._cam_bien_con = DigitalInputDevice(self.mq3_pin)
                 def doc_con():
                     while True:
-                        self._co_con = getattr(self._cam_bien_con, 'is_active', False)
+                        self._co_con = not getattr(self._cam_bien_con, 'is_active', True)
                         time.sleep(0.5)
                 threading.Thread(target=doc_con, daemon=True).start()
                 logger.info(f"Đã kích hoạt cảm biến MQ-3 (nồng độ cồn) tại GPIO {self.mq3_pin}")
