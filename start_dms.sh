@@ -17,4 +17,4 @@ sleep 8
 
 # Chạy DMS với GUI + TTS
 cd "$SCRIPT_DIR"
-exec python main.py --tts "$@"
+exec python main.py --tts --mq3-pin 17 "$@"
