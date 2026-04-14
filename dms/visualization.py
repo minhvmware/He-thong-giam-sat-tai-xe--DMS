@@ -9,7 +9,7 @@ class CauHinhBangTin:
     x: int = 10
     y: int = 10
     chieu_rong: int = 190
-    chieu_cao: int = 130
+    chieu_cao: int = 150
 @dataclass
 class TraoDuaTinhNang:
     bang_tin: CauHinhBangTin = field(default_factory=CauHinhBangTin)
@@ -46,7 +46,8 @@ class TraoDuaTinhNang:
             cv2.line(khung_hinh, mui, tuple(diem_chieu[i].ravel().astype(int)), mau_sac, 2)
         return khung_hinh
     def ve_so_lieu(self, khung_hinh: np.ndarray, ear: float, mar: float,
-                     pitch: float, yaw: float, roll: float, fps: float) -> np.ndarray:
+                     pitch: float, yaw: float, roll: float, fps: float,
+                     con: bool = False) -> np.ndarray:
         p = self.bang_tin
         cv2.rectangle(khung_hinh, (p.x, p.y), (p.x+p.chieu_rong, p.y+p.chieu_cao), (0,0,0), -1)
         cv2.rectangle(khung_hinh, (p.x, p.y), (p.x+p.chieu_rong, p.y+p.chieu_cao), Mau.TRANG, 1)
@@ -57,6 +58,7 @@ class TraoDuaTinhNang:
             (f"Yaw: {yaw:.1f}", Mau.TRANG),
             (f"Roll: {roll:.1f}", Mau.TRANG),
             (f"FPS: {fps:.1f}", Mau.VANG),
+            (f"Con: {'CO' if con else 'KHONG'}", Mau.DO if con else Mau.XANH_LA),
         ]
         for i, (txt, mau_sac) in enumerate(danh_sach_so_lieu):
             cv2.putText(khung_hinh, txt, (p.x+10, p.y+25+i*18), 

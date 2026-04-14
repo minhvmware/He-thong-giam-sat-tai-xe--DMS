@@ -8,8 +8,12 @@ VENV_DIR="$SCRIPT_DIR/dms-env"
 # Kích hoạt virtual environment
 source "$VENV_DIR/bin/activate"
 
-# Đợi camera + desktop sẵn sàng
-sleep 5
+# Đặt DISPLAY để GUI hiện trên màn hình (Wayland hoặc X11)
+export DISPLAY=:0
+export XDG_RUNTIME_DIR=/run/user/$(id -u)
+
+# Đợi desktop + camera sẵn sàng
+sleep 8
 
 # Chạy DMS với GUI + TTS
 cd "$SCRIPT_DIR"

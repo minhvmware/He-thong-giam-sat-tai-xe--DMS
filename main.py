@@ -354,6 +354,7 @@ class HeThongGiamSatTaiXe:
         ket_qua_tay = self._theo_doi_tay.analyze(anh_tang_cuong, ket_qua_mat.get('khung_bbox_mat'))
         fps = self._fps.cap_nhat()
         if ket_qua_mat['canh_bao_buon_ngu']:
+            self._canh_bao_tts('buon_ngu')
             if self._thoi_gian_buon_ngu_bat_dau is None:
                 self._thoi_gian_buon_ngu_bat_dau = ts
             else:
@@ -366,19 +367,15 @@ class HeThongGiamSatTaiXe:
                         daemon=True
                     )
                     luong.start()
-                    self._canh_bao_tts('buon_ngu')
                     self._thoi_gian_am_thanh_cuoi = ts
                     logger.warning(f"⚠️ CẢNH BÁO BUỒN NGỦ! Thời gian: {thoi_gian_buon_ngu:.1f}s")
         else:
             self._thoi_gian_buon_ngu_bat_dau = None
+            self._reset_tts('buon_ngu')
         if ket_qua_mat['canh_bao_ngap']:
             self._canh_bao_tts('ngap')
         else:
             self._reset_tts('ngap')
-        if ket_qua_mat['canh_bao_tu_the']:
-            self._canh_bao_tts('tu_the')
-        else:
-            self._reset_tts('tu_the')
         if ket_qua_tay['distraction_alert']:
             self._canh_bao_tts('mat_tap_trung')
         else:
@@ -399,9 +396,9 @@ class HeThongGiamSatTaiXe:
         dau_ra = self._trao_dua_tinh_nang.ve_diem_moc_tay(dau_ra, ket_qua_tay['hand_landmarks'])
         dau_ra = self._trao_dua_tinh_nang.ve_so_lieu(dau_ra, ket_qua_mat['ear'], ket_qua_mat['mar'],
                                      ket_qua_mat['pitch'], ket_qua_mat['yaw'],
-                                     ket_qua_mat['roll'], fps)
+                                     ket_qua_mat['roll'], fps, self._co_con)
         dau_ra = self._trao_dua_tinh_nang.ve_canh_bao(dau_ra, ket_qua_mat['canh_bao_buon_ngu'],
-                                    ket_qua_mat['canh_bao_ngap'], ket_qua_mat['canh_bao_tu_the'],
+                                    ket_qua_mat['canh_bao_ngap'], False,
                                     ket_qua_tay['distraction_alert'], self._co_con)
         return dau_ra
     def _dung(self) -> None:
